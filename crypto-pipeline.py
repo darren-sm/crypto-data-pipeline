@@ -1,8 +1,8 @@
 import requests
 import logging 
-from io import StringIO
+import datetime
 
-def send_request(link: str, retries: int = 3) -> requests.models.Response:
+def GET_DATA(link: str, retries: int = 3) -> requests.models.Response:
     """
     Send an HTTP request to `link`. If the request failed, it will retry for `retry` times which is 3 by default.
 
@@ -25,7 +25,7 @@ def send_request(link: str, retries: int = 3) -> requests.models.Response:
     """
 
     headers = {"user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.5005.61 Safari/537.36"}
-
+    
     for retry_number in range(1, retries + 1):
         try:
             # Send the HTTP request on `link`
@@ -55,10 +55,62 @@ def send_request(link: str, retries: int = 3) -> requests.models.Response:
     logging.debug("SUCCESS: Request granted with status code of %s", r.status_code)
     return r
 
+def TRANSFORM_DATA(response: requests.models.Response) -> list:
+    """
+    Parse the response of the request we sent through `GET_DATA` function. Transofrm the JSON response suitable to the database schema.
+
+    Parameters:
+    -----------
+    - response: requests.models.Response. Response from request.get method.    
+
+    Returns:
+    -----------
+    - clean_data: list of dictionaries. Each dictionary contain the crypto data for a specific coin on that given timeframe
+
+    Example:
+    -----------
+    >>> r = GET_DATA(link)
+    >>> clean_data = TRANSFORM_DATA(r)
+    >>> print(clean_data)
+    [
+        {
+            'symbol': 'btc',
+            'name': 'Bitcoin',
+            'current_price': 18869.81,
+            ...
+        },
+        {
+            'symbol': 'eth',
+            'name': 'Ethereum',
+            'current_price': 1294.24,
+            ...
+        },
+        ...
+    ]
+    """
+
+    keys_to_remove = ["id", "image", "roi"]
+    for record in response.json():
+        for key in keys_to_remove:
+            record.pop(key, None)        
+
+    return response.json()
+
+def LOAD_DATA(clean_data: list):
+    pass
 
 if __name__ == "__main__":
+    log_filename = f'{datetime.date.today().strftime("%Y-%m-%d")}.log'
+    logging.basicConfig(filename = log_filename, format='[%(asctime)s] %(levelname)s (%(filename)s.%(funcName)s): %(message)s', level=logging.DEBUG)
+    session_start = datetime.datetime.now()
+    logging.info("---STARTING NEW SESSION: %s---", session_start.strftime("%Y-%m-%d %H:%M"))
 
-    logging.basicConfig(format='[%(asctime)s] %(levelname)s (%(filename)s.%(funcName)s): %(message)s', level=logging.DEBUG)
     link = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_de&per_page=100&page=1"
-    send_request("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_de&per_page=100&page=1")
-    send_request("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usasdasd&order=market_cap_de&per_page=100&page=1")
+    response = GET_DATA(link)
+    clean_data = TRANSFORM_DATA(response)
+    LOAD_DATA(clean_data)
+
+    session_end = datetime.datetime.now()
+    process_duration = session_end - session_start 
+    logging.info("---END OF SESSION: %s---", session_end.strftime("%Y-%m-%d %H:%M"))
+    logging.info("Process took %s second(s)\n", f"{process_duration.seconds}.{process_duration.microseconds}")
