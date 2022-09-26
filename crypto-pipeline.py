@@ -1,6 +1,8 @@
+#!/usr/bin/env python3
 import requests
 import logging 
 import datetime
+import sqlite3
 
 def GET_DATA(link: str, retries: int = 3) -> requests.models.Response:
     """
@@ -97,10 +99,21 @@ def TRANSFORM_DATA(response: requests.models.Response) -> list:
     return response.json()
 
 def LOAD_DATA(clean_data: list):
-    pass
+    """
+    Initial state of loading data to a database. For now, I am loading the clean records to a local SQLite3 database. I will change it to fit for BigQuery.
+    """
+    conn = sqlite3.connect("/home/dsm/Documents/All Projects/Crypto/local.db")
+    cursor = conn.cursor()
+
+    with conn:
+        cursor.execute("CREATE TABLE IF NOT EXISTS crypto(symbol text, name text, current_price real, market_cap integer, market_cap_rank integer, fully_diluted_valuation integer, total_volume integer, high_24h real, low_24h real, price_change_24h real, price_change_percentage_24h real, market_cap_change_24h real, market_cap_change_percentage_24h real, circulating_supply integer, total_supply integer, max_supply integer, ath real, ath_change_percentage real, ath_date text, atl real, atl_change_percentage real, atl_date text, last_updated text)")
+
+    with conn:
+        cursor.executemany("INSERT INTO crypto VALUES(:symbol, :name, :current_price, :market_cap, :market_cap_rank, :fully_diluted_valuation, :total_volume, :high_24h, :low_24h, :price_change_24h, :price_change_percentage_24h, :market_cap_change_24h, :market_cap_change_percentage_24h, :circulating_supply, :total_supply, :max_supply, :ath, :ath_change_percentage, :ath_date, :atl, :atl_change_percentage, :atl_date, :last_updated)", clean_data)
+
 
 if __name__ == "__main__":
-    log_filename = f'{datetime.date.today().strftime("%Y-%m-%d")}.log'
+    log_filename = f'/home/dsm/Documents/All Projects/Crypto/{datetime.date.today().strftime("%Y-%m-%d")}.log'
     logging.basicConfig(filename = log_filename, format='[%(asctime)s] %(levelname)s (%(filename)s.%(funcName)s): %(message)s', level=logging.DEBUG)
     session_start = datetime.datetime.now()
     logging.info("---STARTING NEW SESSION: %s---", session_start.strftime("%Y-%m-%d %H:%M"))
