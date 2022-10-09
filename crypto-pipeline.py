@@ -1,8 +1,9 @@
-#!/usr/bin/env python3
 import requests
 import logging 
 import datetime
-import sqlite3
+import psycopg2
+import decimal
+import json
 
 def GET_DATA(link: str, retries: int = 3) -> requests.models.Response:
     """
@@ -91,30 +92,47 @@ def TRANSFORM_DATA(response: requests.models.Response) -> list:
     ]
     """
 
+    transformed_data = response.json()
+
+    # Remove some values we do not need
     keys_to_remove = ["id", "image", "roi"]
-    for record in response.json():
+    for record in transformed_data:
         for key in keys_to_remove:
             record.pop(key, None)        
 
-    return response.json()
+    # Fix values based on attribute datatype and constraint. Set real attributes values to 2 decimal points
+    decimal_attributes = {"current_price" : 2, "high_24h" : 2, "low_24h": 2, "price_change_24h" : 2, "circulating_supply" : 2, "price_change_percentage_24h" : 4, "market_cap_change_24h" : 2,   "market_cap_change_percentage_24h" : 4, "ath" : 2, "ath_change_percentage" : 2, "atl" :2, "atl_change_percentage" : 2}
+
+    for record in transformed_data:
+        for attribute, decimal_places in decimal_attributes.items():
+            record[attribute] = round(decimal.Decimal(str(record[attribute])), decimal_places)
+
+    return transformed_data
 
 def LOAD_DATA(clean_data: list):
     """
-    Initial state of loading data to a database. For now, I am loading the clean records to a local SQLite3 database. I will change it to fit for BigQuery.
+    Initial state of loading data to a database. For now, I am loading the clean records to a cloud PostgreSQL database. I will change it to fit for BigQuery.
     """
-    conn = sqlite3.connect("/home/dsm/Documents/All Projects/Crypto/local.db")
+    
+    # read credentials from a JSON file
+    with open("credentials.json", "r") as f:
+        json_content = json.load(f)
+        credentials = json_content['postgresql']
+
+    # Setup connection to the PostgreSQL database
+    conn = psycopg2.connect(host = credentials['host'], database = credentials['database'], user = credentials['user'], password = credentials['password'])
     cursor = conn.cursor()
 
+    # Create table if it does not yet exist
     with conn:
-        cursor.execute("CREATE TABLE IF NOT EXISTS crypto(symbol text, name text, current_price real, market_cap integer, market_cap_rank integer, fully_diluted_valuation integer, total_volume integer, high_24h real, low_24h real, price_change_24h real, price_change_percentage_24h real, market_cap_change_24h real, market_cap_change_percentage_24h real, circulating_supply integer, total_supply integer, max_supply integer, ath real, ath_change_percentage real, ath_date text, atl real, atl_change_percentage real, atl_date text, last_updated text)")
+        cursor.execute("CREATE TABLE IF NOT EXISTS crypto(symbol varchar(5), name varchar(25), current_price decimal(8,2), market_cap bigint, market_cap_rank integer, fully_diluted_valuation bigint, total_volume bigint, high_24h decimal(8,2), low_24h decimal(8,2), price_change_24h decimal(8,2), price_change_percentage_24h decimal(8,2), market_cap_change_24h decimal(20,2), market_cap_change_percentage_24h decimal, circulating_supply decimal(20,2), total_supply bigint, max_supply bigint, ath decimal(8,2), ath_change_percentage decimal, ath_date timestamp, atl decimal(8,2), atl_change_percentage decimal, atl_date timestamp, last_updated timestamp, PRIMARY KEY(symbol, last_updated))")
 
     with conn:
-        cursor.executemany("INSERT INTO crypto VALUES(:symbol, :name, :current_price, :market_cap, :market_cap_rank, :fully_diluted_valuation, :total_volume, :high_24h, :low_24h, :price_change_24h, :price_change_percentage_24h, :market_cap_change_24h, :market_cap_change_percentage_24h, :circulating_supply, :total_supply, :max_supply, :ath, :ath_change_percentage, :ath_date, :atl, :atl_change_percentage, :atl_date, :last_updated)", clean_data)
+        cursor.executemany("INSERT INTO crypto VALUES(%(symbol)s, %(name)s, %(current_price)s, %(market_cap)s, %(market_cap_rank)s, %(fully_diluted_valuation)s, %(total_volume)s, %(high_24h)s, %(low_24h)s, %(price_change_24h)s, %(price_change_percentage_24h)s, %(market_cap_change_24h)s, %(market_cap_change_percentage_24h)s, %(circulating_supply)s, %(total_supply)s, %(max_supply)s, %(ath)s, %(ath_change_percentage)s, %(ath_date)s, %(atl)s, %(atl_change_percentage)s, %(atl_date)s, %(last_updated)s)", clean_data)
 
 
-if __name__ == "__main__":
-    log_filename = f'/home/dsm/Documents/All Projects/Crypto/{datetime.date.today().strftime("%Y-%m-%d")}.log'
-    logging.basicConfig(filename = log_filename, format='[%(asctime)s] %(levelname)s (%(filename)s.%(funcName)s): %(message)s', level=logging.DEBUG)
+def main(request):    
+    logging.basicConfig(format='[%(asctime)s] %(levelname)s (%(filename)s.%(funcName)s): %(message)s', level=logging.DEBUG)
     session_start = datetime.datetime.now()
     logging.info("---STARTING NEW SESSION: %s---", session_start.strftime("%Y-%m-%d %H:%M"))
 
@@ -127,3 +145,5 @@ if __name__ == "__main__":
     process_duration = session_end - session_start 
     logging.info("---END OF SESSION: %s---", session_end.strftime("%Y-%m-%d %H:%M"))
     logging.info("Process took %s second(s)\n", f"{process_duration.seconds}.{process_duration.microseconds}")
+
+    return "Session Finished"
