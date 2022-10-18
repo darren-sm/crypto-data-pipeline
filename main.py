@@ -100,7 +100,7 @@ def TRANSFORM_DATA(response: requests.models.Response) -> list:
             record.pop(key, None)        
 
     # Fix values based on attribute datatype and constraint. Set real attributes values to 2 decimal points
-    decimal_attributes = {"current_price" : 2, "high_24h" : 2, "low_24h": 2, "price_change_24h" : 2, "circulating_supply" : 2, "price_change_percentage_24h" : 4, "market_cap_change_24h" : 2,   "market_cap_change_percentage_24h" : 4, "ath" : 2, "ath_change_percentage" : 2, "atl" :2, "atl_change_percentage" : 2}
+    decimal_attributes = {"current_price" : 6, "high_24h" : 6, "low_24h": 6, "price_change_24h" : 6, "circulating_supply" : 2, "price_change_percentage_24h" : 4, "market_cap_change_24h" : 2,   "market_cap_change_percentage_24h" : 4, "ath" : 2, "ath_change_percentage" : 2, "atl" :2, "atl_change_percentage" : 2}
 
     for record in transformed_data:
         for attribute, decimal_places in decimal_attributes.items():
