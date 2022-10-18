@@ -16,6 +16,8 @@ b --> c[Insert Clean data to BigQuery]
 | bnb    | BNB      | 274.46        | 44807811887  | 4               | 45312700938             | 44544105     | ...  |
 | ...    | ...      | ...           | ...          | ...             | ...                     | ...          | ...  |
 
+[Download sample crypto data](https://github.com/darren-sm/crypto-data-pipeline/blob/main/sample%20data.csv)
+
 After fetching the cryptocurrency data using the Coingecko API, the script will transform the raw response into a clean data fitting the schema of BigQuery `dataset.table`. This whole pipeline is simply a [Python (3.8) script](https://github.com/darren-sm/crypto-data-pipeline/blob/main/main.py) hosted in Cloud Function to be triggered regularly for every 5 minutes through Cloud Scheduler HTTP request.
 
 ```
