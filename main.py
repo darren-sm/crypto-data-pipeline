@@ -1,9 +1,8 @@
 import requests
 import logging 
 import datetime
-import psycopg2
-import decimal
-import json
+import os
+from google.cloud import bigquery
 
 def GET_DATA(link: str, retries: int = 3) -> requests.models.Response:
     """
@@ -105,30 +104,43 @@ def TRANSFORM_DATA(response: requests.models.Response) -> list:
 
     for record in transformed_data:
         for attribute, decimal_places in decimal_attributes.items():
-            record[attribute] = round(decimal.Decimal(str(record[attribute])), decimal_places)
+            record[attribute] = round(record[attribute], decimal_places)
 
     return transformed_data
 
 def LOAD_DATA(clean_data: list):
     """
-    Initial state of loading data to a database. For now, I am loading the clean records to a cloud PostgreSQL database. I will change it to fit for BigQuery.
+    LOAD a list of JSON data into BigQuery schema.table (crypto.crypto)
+
+    Parameters:
+    -----------
+    - clean_data: list. Transformed data from CoinGecko API response
+
+    Returns:
+    -----------
+    - None
+
+    Example:
+    -----------
+    >>> r = GET_DATA(link)
+    >>> clean_data = TRANSFORM_DATA(r)
+    >>> LOAD_DATA(clean_data)
     """
     
-    # read credentials from a JSON file
-    with open("credentials.json", "r") as f:
-        json_content = json.load(f)
-        credentials = json_content['postgresql']
+    # Set the GOOGLE_APPLICATION_CREDENTIALS to current python session environment
+    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = f"{os.getcwd()}/crypto-pipeline-bq.json"
 
-    # Setup connection to the PostgreSQL database
-    conn = psycopg2.connect(host = credentials['host'], database = credentials['database'], user = credentials['user'], password = credentials['password'])
-    cursor = conn.cursor()
-
-    # Create table if it does not yet exist
-    with conn:
-        cursor.execute("CREATE TABLE IF NOT EXISTS crypto(symbol varchar(5), name varchar(25), current_price decimal(8,2), market_cap bigint, market_cap_rank integer, fully_diluted_valuation bigint, total_volume bigint, high_24h decimal(8,2), low_24h decimal(8,2), price_change_24h decimal(8,2), price_change_percentage_24h decimal(8,2), market_cap_change_24h decimal(20,2), market_cap_change_percentage_24h decimal, circulating_supply decimal(20,2), total_supply bigint, max_supply bigint, ath decimal(8,2), ath_change_percentage decimal, ath_date timestamp, atl decimal(8,2), atl_change_percentage decimal, atl_date timestamp, last_updated timestamp, PRIMARY KEY(symbol, last_updated))")
-
-    with conn:
-        cursor.executemany("INSERT INTO crypto VALUES(%(symbol)s, %(name)s, %(current_price)s, %(market_cap)s, %(market_cap_rank)s, %(fully_diluted_valuation)s, %(total_volume)s, %(high_24h)s, %(low_24h)s, %(price_change_24h)s, %(price_change_percentage_24h)s, %(market_cap_change_24h)s, %(market_cap_change_percentage_24h)s, %(circulating_supply)s, %(total_supply)s, %(max_supply)s, %(ath)s, %(ath_change_percentage)s, %(ath_date)s, %(atl)s, %(atl_change_percentage)s, %(atl_date)s, %(last_updated)s) ON CONFLICT ON CONSTRAINT crypto_pkey DO NOTHING;", clean_data)
+    # Start BigQuery session
+    client = bigquery.Client()
+    table_id = "crypto-pipeline-364805.crypto.crypto"
+    
+    # Insert data to BigQuery
+    errors = client.insert_rows_json(table_id, clean_data)  # Make an API request.
+    if errors == []:
+        logging.info("%s rows have been added.", len(clean_data))
+    else:
+        logging.error("Encountered errors while inserting rows: %s", errors)
+    client.close()
 
 
 def main(request):    
